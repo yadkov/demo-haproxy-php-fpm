@@ -1,0 +1,49 @@
+---
+- name: Ensure httpd is installed
+  yum:
+    name:
+      - httpd
+      - mod_ssl
+    state: present
+  become: True
+
+- name: Ensure ports 80 and 443 are accessible
+  iptables:
+    action: insert
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ item.port }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: 80, comment: "Allow http traffic" }
+    - { port: 443, comment: "Allow https traffic" }
+  become: True
+  notify: "Save iptables configuration"
+
+- name: Ensure gzip compression is configured
+  template:
+    src: mod_deflate.conf.j2
+    dest: /etc/httpd/conf.d/mod_deflate.conf
+  become: True
+  notify: Restart httpd
+
+- name: Ensure httpd is running and enabled
+  systemd:
+    name: httpd
+    state: started
+    enabled: True
+  become: True
+
+- name: Rotate httpd logs
+  template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.d/httpd
+    owner: root
+    group: root
+    mode: '0600'
+  become: True
+
+- meta: flush_handlers

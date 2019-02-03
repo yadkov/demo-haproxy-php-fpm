@@ -1,0 +1,93 @@
+---
+- name: Install EPEL repo
+  yum:
+    name: "{{ common_epel_repo_url }}"
+    state: present
+  register: result
+  become: True
+
+- name: Import EPEL GPG key
+  rpm_key:
+    key: "{{ common_epel_repo_gpg_key_url }}"
+    state: present
+  become: True
+  
+- name: ensure python libs for selinux are available
+  yum:
+    name: 
+      - libsemanage-python
+      - libselinux-python
+    state: present
+  become: True
+
+- name: upgrade all packages
+  yum:
+    name: "*"
+    state: latest
+  become: True
+
+- name: ensure timezone is set to UTC
+  file:
+    src: /usr/share/zoneinfo/GMT
+    dest: /etc/localtime
+    state: link
+  become: True
+
+- name: ensure chrony conf is with the bg ntp servers
+  template:
+    src: "chrony.conf.j2"
+    dest: "/etc/chrony.conf"
+  become: True
+  notify: restart chronyd
+
+- name: chronyd - ensure is enabled and started
+  service:
+    name: chronyd
+    state: started
+    enabled: True
+  become: True
+  tags: run
+
+- name: ensure the MOTD file is present and updated
+  template:
+    src: motd
+    dest: /etc/motd
+    owner: root
+    group: root
+    mode: '0644'
+  become: True
+
+- name: ensure hostname is the same as the hostname in ansible host file
+  hostname:
+    name: "{{ inventory_hostname }}"
+  become: True
+
+- name: ensure postfix is running
+  service:
+    name: postfix
+    state: started
+    enabled: True
+  become: True
+
+- name: remove rules for postfix logrotate in default place
+  lineinfile:
+    path: /etc/logrotate.d/syslog
+    line: "/var/log/maillog"
+    state: absent
+  become: True
+
+- name: Set rules for postfix logrotate
+  template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.d/maillog
+    owner: root
+    group: root
+    mode: '0644'
+  become: True
+
+- name: Create email alias for the root
+  lineinfile:
+    path: /etc/aliases
+    line: "root:	gjadkov@gmail.com"
+  notify: Run newaliases
+  become: True

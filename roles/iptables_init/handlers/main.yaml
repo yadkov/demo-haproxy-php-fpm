@@ -1,0 +1,5 @@
+---
+- name: Save iptables configuration
+  shell: service iptables save
+    warn=False
+  become: True

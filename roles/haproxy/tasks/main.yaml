@@ -1,0 +1,45 @@
+---
+- name: ensure haproxy is installed
+  yum:
+    name: haproxy
+    state: present
+  become: True
+
+- name: put self signed certificate
+  template:
+    src: haproxy.pem
+    dest: "/etc/pki/tls/certs/haproxy.pem"
+  become: True
+
+- name: ensure HAProxy config is in place
+  template:
+    src: haproxy.cfg.j2
+    dest: "/etc/haproxy/haproxy.cfg"
+    validate: "haproxy -f %s -c -q"
+  become: True
+  notify: restart haproxy
+
+- name: ensure HAProxy is started and enabled
+  systemd:
+    name: haproxy
+    state: started
+    enabled: True
+  become: True
+
+#TODO configure rsyslog for haproxy loging
+
+- name: ensure ports 80 and 443 are accessible
+  iptables:
+    action: insert
+    chain: INPUT
+    protocol: tcp
+    destination_port: "{{ item.port }}"
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop:
+    - { port: 80, comment: "Allow http traffic" }
+    - { port: 443, comment: "Allow https traffic" }
+  become: True
+  notify: "Save iptables configuration"

@@ -1,0 +1,31 @@
+global
+  log		127.0.0.1 local2 info
+  chroot	/var/lib/haproxy
+  pidfile	/var/run/haproxy.pid
+  user		haproxy
+  group		haproxy 
+  daemon
+  maxsslconn	256
+  tune.ssl.default-dh-param 2048
+
+defaults
+  log global
+  mode  http
+  option  httplog
+  option  dontlognull
+  timeout connect 10s
+  timeout client 30s
+  timeout server 30s
+
+frontend http-in
+    bind *:80
+    bind *:443 ssl crt /etc/pki/tls/certs/haproxy.pem
+    default_backend backend_servers
+
+backend backend_servers
+    balance roundrobin
+{% for item in groups['demo'] %}
+{% if item != inventory_hostname %}
+    server {{ item }} {{ hostvars[item]['private_ip'] }}:80 cookie {{ item }} check
+{% endif %}
+{% endfor %}

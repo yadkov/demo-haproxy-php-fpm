@@ -1,0 +1,18 @@
+---
+- name: Run newaliases
+  command: newaliases
+  become: True
+  listen: Run newaliases
+
+- name: Restart postfix
+  service:
+    name: postfix
+    state: restarted
+  become: True
+  listen: Run newaliases
+
+- name: restart chronyd
+  service:
+    name: chronyd
+    state: restarted
+  become: True

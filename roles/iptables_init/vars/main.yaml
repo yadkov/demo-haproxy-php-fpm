@@ -1,0 +1,4 @@
+---
+iptables_init_list_of_packages:
+  - iptables
+  - iptables-services

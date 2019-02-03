@@ -1,0 +1,150 @@
+---
+- name: enable net.ipv4.ip_forward
+  sysctl:
+    name: net.ipv4.ip_forward
+    value: 1
+    reload: yes
+    state: present
+  become: True
+
+- name: add wireguard repository
+  yum_repository:
+    name: wireguard
+    description: wireguard repo
+    baseurl: https://copr-be.cloud.fedoraproject.org/results/jdoss/wireguard/epel-7-$basearch/
+    gpgcheck: True
+    gpgkey: https://copr-be.cloud.fedoraproject.org/results/jdoss/wireguard/pubkey.gpg
+  become: True
+
+- name: install required packages
+  yum:
+    name:
+      - epel-release
+      - kernel
+      - kernel-headers
+      - dkms
+    state: present
+  become: True
+
+- name: install wireguard packages
+  yum:
+    name:
+      - wireguard-dkms
+      - wireguard-tools
+    state: present
+  become: True
+
+- name: Generate private keys
+  shell: wg genkey
+  register: wireguard_genkey
+  changed_when: false
+
+- set_fact:
+    private_key: "{{ wireguard_genkey.stdout }}"
+
+- name: Generate public keys
+  shell: "echo {{ private_key }} | wg pubkey"
+  register: wireguard_pubkey
+  changed_when: false
+
+- set_fact:
+    public_key: "{{ wireguard_pubkey.stdout }}"
+
+- name: Create wireguard directory
+  file:
+    path: /etc/wireguard
+    state: directory
+    mode: 0700
+  become: True
+
+- name: Configuring wireguard
+  template:
+    src: wg.conf.j2
+    dest: /etc/wireguard/wg0.conf
+    owner: root
+    group: root
+    mode: 0600
+  become: True
+  notify: restart wg
+
+- name: ensure wireguard is started and enabled
+  systemd:
+    name: "wg-quick@wg0"
+    enabled: yes
+    state: started
+  become: True
+
+- name: Track input chain
+  iptables:
+    action: insert
+    chain: INPUT
+    match: conntrack
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+  become: True
+
+- name: Track forward chain  
+  iptables:
+    action: insert
+    chain: FORWARD
+    match: conntrack
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+  become: True
+
+- name: Allow incoming wireguard connections    
+  iptables:
+    action: insert
+    chain: INPUT
+    protocol: udp
+    match: udp
+    destination_port: 51820
+    ctstate: NEW
+    jump: ACCEPT
+  become: True
+   
+- name: Allow recursive DNS tcp    
+  iptables:
+    action: insert
+    chain: INPUT
+    source: "10.0.1.0/24"
+    protocol: tcp
+    match: tcp
+    destination_port: 53
+    ctstate: NEW
+    jump: ACCEPT
+  become: True
+  
+- name: Allow recursive DNS udp  
+  iptables:
+    action: insert
+    chain: INPUT
+    source: "10.0.1.0/24"
+    protocol: udp
+    match: udp
+    destination_port: 53
+    ctstate: NEW
+    jump: ACCEPT
+  become: True
+    
+- name: Allow forwarding of packets that stay in the tunnel 
+  iptables:
+    action: insert
+    chain: FORWARD
+    in_interface: wg0
+    match: conntrack
+    out_interface: wg0
+    ctstate: NEW
+    jump: ACCEPT
+  become: True
+
+- name: Set up NAT
+  iptables:
+    action: insert
+    table: nat
+    chain: POSTROUTING
+    source: "10.0.1.0/24"
+    out_interface: "{{ ansible_host }}"
+    jump: MASQUERADE 
+  become: True
+  notify: Save iptables configuration

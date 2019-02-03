@@ -1,0 +1,43 @@
+---
+- name: ensure php-fpm packages are available
+  yum:
+    name:
+      - httpd
+      - httpd-tools
+      - php-fpm
+    state: present
+  become: True
+
+- name: httpd set up mpm conf 
+  template:
+    src: 00-mpm.conf.j2
+    dest: "/etc/httpd/conf.modules.d/00-mpm.conf"
+  become: True
+
+- name: httpd set up php conf
+  template:
+    src: php.conf.j2
+    dest: "/etc/httpd/conf.d/php.conf"
+  become: True
+
+- name: httpd set up  www conf
+  template:
+    src: www.conf.j2
+    dest: "/etc/php-fpm.d/www.conf"
+  become: True
+  notify: "restart web services"
+
+- name: put info file
+  template:
+    src: info.php.j2
+    dest: "/var/www/html/info.php"
+    owner: root
+    group: apache
+  become: True
+
+- name: ensure php-fpm service is enabled and started 
+  systemd:
+    name: php-fpm
+    state: started
+    enabled: True
+  become: True

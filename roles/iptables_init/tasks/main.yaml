@@ -1,0 +1,52 @@
+---
+- name: ensure firewalld is disabled
+  systemd:
+    name: firewalld
+    state: stopped
+    enabled: False
+    masked: True
+    daemon_reload: True
+  become: True
+
+- name: Ensure iptables packages are installed
+  yum:
+    name: "{{ iptables_init_list_of_packages | list }}"
+    state: present
+  become: True
+
+- name: Ensure iptables are started and enabled
+  systemd:
+    name: iptables
+    state: started
+    enabled: True
+    daemon_reload: True
+  become: True
+
+- name: Flush iptables
+  iptables:
+    flush: True
+  become: True
+
+- name: Allow incomming packets on TCP port 22
+  iptables:
+    action: append
+    chain: INPUT
+    protocol: tcp
+    destination_port: 22
+    ctstate: NEW
+    syn: match
+    jump: ACCEPT
+    comment: Accept new SSH connections.
+  become: True
+  notify: Save iptables configuration
+
+- name: Allow related and established connections
+  iptables:
+    action: append
+    chain: INPUT
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+  become: True
+  notify: Save iptables configuration
+
+# TODO Set default policy to DROP

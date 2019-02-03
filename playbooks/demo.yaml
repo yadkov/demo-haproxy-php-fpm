@@ -1,0 +1,16 @@
+---
+- hosts: demo
+  roles:
+  - role: common
+  - role: sshd
+  - role: iptables_init
+  - role: wireguard
+
+- hosts: haproxy
+  roles:
+  - role: haproxy
+
+- hosts: web
+  roles:
+  - role: httpd
+  - role: php-fpm
